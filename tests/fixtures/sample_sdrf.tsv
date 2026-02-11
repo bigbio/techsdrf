@@ -1,0 +1,4 @@
+source name	characteristics[organism]	characteristics[organism part]	characteristics[disease]	comment[data file]	comment[instrument]	comment[dissociation method]	comment[precursor mass tolerance]	comment[fragment mass tolerance]	comment[MS min charge]	comment[MS max charge]
+sample1	Homo sapiens	liver	normal	sample1.raw	NT=Q Exactive HF;AC=MS:1002523	NT=HCD;AC=MS:1000422	10 ppm	0.02 Da	2	6
+sample2	Homo sapiens	liver	normal	sample2.raw	NT=Q Exactive HF;AC=MS:1002523	NT=HCD;AC=MS:1000422	10 ppm	0.02 Da	2	6
+sample3	Homo sapiens	liver	normal	sample3.raw	NT=Q Exactive HF;AC=MS:1002523	NT=HCD;AC=MS:1000422	10 ppm	0.02 Da	2	6

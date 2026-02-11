@@ -1,0 +1,4 @@
+#version=1.0
+#project=PXD000001
+source name	comment[data file]	comment[instrument]	comment[dissociation method]
+sample1	sample1.raw	NT=Orbitrap Fusion;AC=MS:1002416	NT=CID;AC=MS:1000133
