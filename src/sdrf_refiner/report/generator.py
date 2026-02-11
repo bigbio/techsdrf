@@ -160,7 +160,24 @@ class ReportGenerator:
             return
 
         for key, value in sdrf_params.items():
-            if value:
+            if key == "modifications" and isinstance(value, list):
+                # Format modifications as readable list
+                self._add_line(f"  modifications ({len(value)}):")
+                for m in value:
+                    name = m.get("name", "unknown")
+                    acc = m.get("accession", "")
+                    mt = m.get("modification_type", "")
+                    ta = m.get("target_amino_acids", "")
+                    pp = m.get("position", "")
+                    parts = [f"{name} ({acc})"]
+                    if mt:
+                        parts.append(f"[{mt}]")
+                    if ta:
+                        parts.append(f"TA={ta}")
+                    if pp:
+                        parts.append(f"PP={pp}")
+                    self._add_line(f"    {' '.join(parts)}")
+            elif value:
                 formatted = self._format_param_value(value)
                 self._add_line(f"  {key}: {formatted}")
             else:
