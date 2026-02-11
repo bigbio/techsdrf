@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from lxml import etree
-
 from sdrf_refiner.config import (
     ACQUISITION_ONTOLOGY,
     FRAGMENTATION_ONTOLOGY,
@@ -274,10 +272,7 @@ class MSAnalyzer:
 
     def _read_header(self, mzml_file: Path) -> Optional[Dict[str, str]]:
         """
-        Read mzML header to detect instrument model.
-
-        Tries pyopenms first (robust C++ parser), then falls back to
-        manual lxml parsing if pyopenms is not available.
+        Read mzML header to detect instrument model via pyopenms.
 
         Args:
             mzml_file: Path to mzML file
@@ -285,13 +280,7 @@ class MSAnalyzer:
         Returns:
             Instrument model data or None
         """
-        # Try pyopenms first - handles mzML robustly (no XML-declaration issues)
-        result = self._read_header_pyopenms(mzml_file)
-        if result is not None:
-            return result
-
-        # Fall back to lxml-based parsing
-        return self._read_header_lxml(mzml_file)
+        return self._read_header_pyopenms(mzml_file)
 
     # --- pyopenms enum → human-readable mappings ---
     _MASS_ANALYZER_NAMES = {
@@ -317,10 +306,6 @@ class MSAnalyzer:
         """
         Read instrument model and additional metadata from mzML using pyopenms.
 
-        pyopenms uses the OpenMS C++ mzML parser, which is more robust
-        than lxml against minor formatting issues (BOM, whitespace before
-        XML declaration, etc.).
-
         In addition to instrument model, this method populates:
         - mass_analyzer_type, ionization_method, polarity
         - ms1_scan_range, isolation_window_da, instrument_serial_number
@@ -334,7 +319,7 @@ class MSAnalyzer:
         try:
             import pyopenms as oms
         except ImportError:
-            logger.debug("pyopenms not available, falling back to lxml header parsing")
+            logger.error("pyopenms is required but not installed")
             return None
 
         try:
@@ -473,74 +458,6 @@ class MSAnalyzer:
         except Exception as e:
             logger.warning(f"pyopenms header parsing failed: {e}")
             return None
-
-    def _read_header_lxml(self, mzml_file: Path) -> Optional[Dict[str, str]]:
-        """
-        Read instrument model from mzML using lxml (fallback).
-
-        Reads lines up to the <run> tag and re-parses as XML.
-        Can fail if the XML declaration is not at byte 0.
-
-        Returns:
-            Instrument model data or None
-        """
-        # Open file (handle gzipped files)
-        if str(mzml_file).endswith(".gz"):
-            infile = gzip.open(mzml_file, "rt", encoding="utf-8", errors="ignore")
-        else:
-            infile = open(mzml_file, "r", encoding="utf-8", errors="ignore")
-
-        # Read header until <run> tag
-        buffer = '<?xml version="1.0" encoding="utf-8"?>\n<mzML>\n'
-        recognized_things = {}
-
-        try:
-            for line in infile:
-                if "<indexedmzML " in line:
-                    continue
-                if "<run " in line:
-                    break
-
-                if 'softwareRef="tdf2mzml"' in line:
-                    recognized_things["likely_timsTOF"] = True
-
-                buffer += line
-        finally:
-            infile.close()
-
-        buffer += "</mzML>\n"
-
-        # Parse XML
-        try:
-            xmlroot = etree.fromstring(buffer.encode("utf-8"))
-        except etree.XMLSyntaxError as e:
-            logger.warning(f"XML parsing error in header (lxml fallback): {e}")
-            return None
-
-        # Get namespace
-        namespace = xmlroot.nsmap
-        if None in namespace:
-            ns = "{" + namespace[None] + "}"
-        else:
-            ns = ""
-
-        # Find instrument CV params
-        cv_params = xmlroot.findall(f".//{ns}cvParam")
-        model_data = None
-
-        for cv_param in cv_params:
-            accession = cv_param.get("accession")
-            if accession in self._instrument_lookup:
-                model_data = self._instrument_lookup[accession].copy()
-                if recognized_things.get("likely_timsTOF"):
-                    model_data["inferred_name"] = "timsTOF"
-                break
-
-        if model_data is None:
-            logger.warning("Could not determine instrument model from mzML header")
-            model_data = {"name": "unknown", "accession": "", "category": "QTOF"}
-
-        return model_data
 
     def _read_spectra(self, mzml_file: Path) -> Dict[str, Any]:
         """

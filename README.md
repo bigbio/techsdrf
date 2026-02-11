@@ -115,7 +115,7 @@ techsdrf info -s input.sdrf.tsv       # Show SDRF parameters
 TechSDRF extracts instrument parameters from mzML files using header parsing for static metadata and spectrum-level scanning for runtime parameters.
 
 **Header parsing (instrument model, mass analyzer, ionization):**
-1. Load the mzML file via **pyopenms** (`MSExperiment` / `MzMLFile`). Falls back to **lxml** if pyopenms is unavailable.
+1. Load the mzML file via **pyopenms** (`MSExperiment` / `MzMLFile`).
 2. Match the instrument name/model string against a curated lookup table of ~40 Thermo, Bruker, Waters, and AB SCIEX instruments, each mapped to a PSI-MS ontology accession (e.g., `MS:1002416` for Orbitrap Fusion) and an instrument category (`pureHCD`, `variable`, `ion_trap`, `QTOF`).
 3. Extract mass analyzer type, ionization method, and instrument serial number from the pyopenms `Instrument` object.
 
