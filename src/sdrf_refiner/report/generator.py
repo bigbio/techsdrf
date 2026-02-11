@@ -354,19 +354,20 @@ class ReportGenerator:
         scanned = hit["total_scanned"]
         conf_label = self._confidence_label(hit["max_confidence"])
         files_det = hit["files_detected"]
+        mod_type = hit.get("modification_type", "variable")
 
         if tier == 1:
             pct = (evidence / scanned * 100) if scanned > 0 else 0
             return (
                 f"{name} ({unimod}): detected in {pct:.0f}% of spectra "
-                f"({files_det}/{n_files} files) [{conf_label}]"
+                f"({files_det}/{n_files} files) [{conf_label}] [{mod_type}]"
             )
 
         if tier == 2:
             pct = (evidence / scanned * 100) if scanned > 0 else 0
             return (
                 f"{name} ({unimod}): {pct:.1f}% of spectra "
-                f"({evidence} observations) [{conf_label}]"
+                f"({evidence} observations) [{conf_label}] [{mod_type}]"
             )
 
         # Tier 3: mass shifts with enrichment stats
@@ -384,7 +385,7 @@ class ReportGenerator:
 
         return (
             f"{name}{delta_str} ({unimod}): {evidence} observations "
-            f"({files_det}/{n_files} files) [{conf_label}]{stats_str}"
+            f"({files_det}/{n_files} files) [{conf_label}] [{mod_type}]{stats_str}"
         )
 
     def _add_changes_section(self) -> None:

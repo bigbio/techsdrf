@@ -44,6 +44,7 @@ class PTMHit:
     evidence_count: int
     total_spectra_scanned: int
     confidence: float  # 0.0–1.0
+    modification_type: str = "variable"  # "fixed" or "variable"
     mass_delta: Optional[float] = None
     enrichment: Optional[float] = None  # observed/expected ratio (tier 3)
     probability: Optional[float] = None  # 1 - p-value (tier 3)
@@ -169,6 +170,13 @@ KNOWN_MASS_SHIFTS: List[MassShift] = [
     MassShift("Formyl", "UNIMOD:122", 27.9949, 0.02),
 ]
 
+# UNIMOD accessions of modifications typically applied as fixed in sample prep
+# (alkylation reagents). Everything else defaults to "variable".
+FIXED_MODIFICATION_UNIMOD = frozenset({
+    "UNIMOD:4",   # Carbamidomethyl (iodoacetamide alkylation)
+    "UNIMOD:24",  # Propionamide (acrylamide alkylation)
+})
+
 
 # =============================================================================
 # PTMDetector class
@@ -250,6 +258,7 @@ class PTMDetector:
                         "unimod_accession": hit.unimod_accession,
                         "tier": hit.tier,
                         "mass_delta": hit.mass_delta,
+                        "modification_type": hit.modification_type,
                         "total_evidence": 0,
                         "total_scanned": 0,
                         "max_confidence": 0.0,
@@ -368,6 +377,7 @@ class PTMDetector:
             evidence_count=count,
             total_spectra_scanned=n_total,
             confidence=confidence,
+            modification_type="fixed",
         )]
 
     @staticmethod
@@ -611,6 +621,9 @@ class PTMDetector:
                 enrichment,
                 thresholds=[(5.0, 0.95), (3.0, 0.85), (2.0, 0.7), (0.0, 0.5)],
             )
+            mod_type = (
+                "fixed" if shift.unimod in FIXED_MODIFICATION_UNIMOD else "variable"
+            )
             hits.append(PTMHit(
                 name=shift.name,
                 unimod_accession=shift.unimod,
@@ -618,6 +631,7 @@ class PTMDetector:
                 evidence_count=c["count"],
                 total_spectra_scanned=n_total,
                 confidence=confidence,
+                modification_type=mod_type,
                 mass_delta=shift.delta,
                 enrichment=round(enrichment, 2),
                 probability=round(c["probability"], 4),

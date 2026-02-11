@@ -275,6 +275,16 @@ Detects common variable modifications by looking for precursor mass pairs separa
 | ≥2.0× | MEDIUM (0.70) |
 | ≥1.5× | LOW (0.50) |
 
+#### Fixed vs Variable Classification
+
+Each detected PTM is classified as **fixed** or **variable** based on its tier and identity:
+
+| Tier | Rule | Examples |
+|------|------|----------|
+| Tier 1 (reporter ions) | Always **fixed** | TMT, iTRAQ labels are covalently attached to all peptides |
+| Tier 2 (diagnostic ions) | Always **variable** | Phosphorylation, glycosylation occur on a subset of peptides |
+| Tier 3 (mass shifts) | Lookup by UNIMOD accession | Carbamidomethyl (UNIMOD:4) and Propionamide (UNIMOD:24) are **fixed** (alkylation reagents applied to all cysteines); all others are **variable** |
+
 #### Multi-File Aggregation
 
 When multiple files are analyzed, per-file PTM results are aggregated:
@@ -290,15 +300,15 @@ PTM DETECTION
   Files analyzed for PTMs: 3
 
   Reporter Ions:
-    TMT11plex (UNIMOD:737): detected in 52% of spectra (3/3 files) [HIGH]
+    TMT11plex (UNIMOD:737): detected in 52% of spectra (3/3 files) [HIGH] [fixed]
 
   Diagnostic Ions:
-    Phospho (UNIMOD:21): 8.3% of spectra (415 observations) [MEDIUM]
+    Phospho (UNIMOD:21): 8.3% of spectra (415 observations) [MEDIUM] [variable]
 
   Mass Shifts:
-    Oxidation (+15.995 Da) (UNIMOD:35): 2840 obs (3/3 files) [MEDIUM] (enrichment=4.2x, prob=1.00)
-    Deamidation (+0.984 Da) (UNIMOD:7): 2650 obs (3/3 files) [MEDIUM] (enrichment=3.9x, prob=1.00)
-    Methyl (+14.016 Da) (UNIMOD:34): 2410 obs (3/3 files) [MEDIUM] (enrichment=3.6x, prob=1.00)
+    Oxidation (+15.995 Da) (UNIMOD:35): 2840 obs (3/3 files) [MEDIUM] [variable] (enrichment=4.2x, prob=1.00)
+    Deamidation (+0.984 Da) (UNIMOD:7): 2650 obs (3/3 files) [MEDIUM] [variable] (enrichment=3.9x, prob=1.00)
+    Methyl (+14.016 Da) (UNIMOD:34): 2410 obs (3/3 files) [MEDIUM] [variable] (enrichment=3.6x, prob=1.00)
 ```
 
 ## Possible Improvements
