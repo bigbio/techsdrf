@@ -20,7 +20,7 @@ TechSDRF downloads raw MS files from PRIDE or MassIVE, analyzes them to detect i
   - Isobaric labels (TMT6/11/16/18plex, iTRAQ4/8plex) via reporter ion detection
   - Enrichment signatures (phospho, glyco) via diagnostic ions
   - Common variable modifications via precursor mass pairing with statistical scoring
-  - See [Algorithms](#ptm-detection-algorithms) for details
+  - See [Algorithms](#algorithms) for details
 
 - **Multi-repository support**:
   - PRIDE (PXD accessions) via PRIDE API
@@ -108,11 +108,67 @@ techsdrf validate -s input.sdrf.tsv   # Validate an SDRF file
 techsdrf info -s input.sdrf.tsv       # Show SDRF parameters
 ```
 
-## PTM Detection Algorithms
+## Algorithms
+
+### Instrument Parameter Detection
+
+TechSDRF extracts instrument parameters from mzML files using header parsing for static metadata and spectrum-level scanning for runtime parameters.
+
+**Header parsing (instrument model, mass analyzer, ionization):**
+1. Load the mzML file via **pyopenms** (`MSExperiment` / `MzMLFile`). Falls back to **lxml** if pyopenms is unavailable.
+2. Match the instrument name/model string against a curated lookup table of ~40 Thermo, Bruker, Waters, and AB SCIEX instruments, each mapped to a PSI-MS ontology accession (e.g., `MS:1002416` for Orbitrap Fusion) and an instrument category (`pureHCD`, `variable`, `ion_trap`, `QTOF`).
+3. Extract mass analyzer type, ionization method, and instrument serial number from the pyopenms `Instrument` object.
+
+**Spectrum-level scanning (fragmentation, charge, acquisition, polarity):**
+1. Iterate up to 10,000 spectra. For Thermo data, parse the **filter string** (e.g., `FTMS + p NSI Full ms2 400.00@hcd30.00`) to extract:
+   - Detector type -> mass accuracy (`FTMS`/`ASTMS` = high resolution, `ITMS` = low resolution)
+   - Fragmentation method -> `HCD`, `CID`, `ETD`, `EThcD`, `ETciD` (supports both MS2 and MS3)
+   - MS level (ms1, ms2, ms3)
+2. For non-Thermo data, use CV terms from the mzML spectrum metadata.
+3. **Fragmentation consensus:** Count spectra per fragmentation type per MS level. The dominant type (>90% of spectra) is reported; otherwise `multiple`.
+4. **Acquisition type:** Determined from median isolation window width: <=3 Da -> DDA, >=15 Da -> DIA.
+5. **Charge state range:** Collected from precursor `charge state` CV terms across all MS2 spectra.
+6. **Collision energy:** Extracted from `MS:1000045` (collision energy) and `MS:1000138` (percent collision energy) activation parameters. Stepped CE is detected when 2+ distinct values each appear in >5% of spectra.
+7. **Polarity, scan window, isolation window:** Aggregated from pyopenms spectrum-level instrument settings.
+
+### Tolerance Estimation
+
+Precursor and fragment mass tolerances are estimated empirically using two independent methods, with a consensus algorithm to select the best estimate.
+
+**Method 1: Gaussian fitting (RunAssessor)**
+- Uses the [RunAssessor](https://github.com/mpc-bioinformatics/RunAssessor) library to fit Gaussian distributions to mass error profiles.
+- RunAssessor reads spectra from the mzML file, builds composite spectra from low-end and neutral-loss regions, identifies regions of interest (ROIs), and fits the mass error distribution to estimate the standard deviation.
+- Reports precursor tolerance in ppm and fragment tolerance in ppm or Da (depending on the mass analyzer type).
+
+**Method 2: Crux param-medic**
+- Uses the [Crux](http://crux.ms/) `param-medic` tool, which estimates mass measurement accuracy from paired precursor/fragment peak distributions.
+- Runs as an external subprocess with a 5-minute timeout.
+- Reports precursor error in ppm and fragment bin size in Th (Da).
+- Note: Requires a compatibility patch for mzML files from ThermoRawFileParser (PSI term `1003145` -> `1000615`), applied automatically to a temporary copy.
+
+**Consensus algorithm:**
+1. Collect estimates from both methods (when available).
+2. Check agreement: if all estimates are within 20% of the median, compute a **confidence-weighted average**.
+3. If a majority agrees (>=2 methods within 20%), use the **median** (robust to outliers).
+4. If methods disagree significantly, select the **highest-confidence** estimate, with Gaussian preferred over Crux when confidence is tied.
+5. The consensus reports precursor and fragment tolerances in both ppm and Da, using the native unit from the winning method.
+
+**Instrument-based heuristic fallback:**
+When empirical estimation is unavailable, default tolerances are assigned by instrument category:
+
+| Category | Precursor | Fragment |
+|----------|-----------|----------|
+| pureHCD (Exactive, Q Exactive) | 10 ppm | 20 ppm |
+| variable (Fusion, Lumos, Eclipse) - HR frag | 10 ppm | 20 ppm |
+| variable - LR frag (IT-CID) | 10 ppm | 0.6 Da |
+| ion_trap (LTQ, Velos) | 500 ppm | 0.6 Da |
+| QTOF (timsTOF, TripleTOF) | 20 ppm | 40 ppm |
+
+### PTM Detection
 
 TechSDRF detects post-translational modifications directly from MS spectra using three independent detection tiers. Results are reported but not automatically written to SDRF modification columns.
 
-### Tier 1: Reporter Ion Detection
+#### Tier 1: Reporter Ion Detection
 
 Detects isobaric labeling reagents (TMT, iTRAQ) by scanning the low-m/z region (100–140 m/z) of MS2/MS3 spectra for characteristic reporter ion clusters.
 
@@ -137,7 +193,7 @@ TMT plex variants (6/11/16/18) share reporter channels — TMT6 channels are a s
 | ≥10%                | MEDIUM (0.70)|
 | ≥5%                 | LOW (0.50) |
 
-### Tier 2: Diagnostic Ion Detection
+#### Tier 2: Diagnostic Ion Detection
 
 Identifies PTMs that produce characteristic fragment signatures: neutral losses (phosphorylation) and oxonium ions (glycosylation).
 
@@ -158,7 +214,7 @@ Identifies PTMs that produce characteristic fragment signatures: neutral losses 
 | ≥5%                 | LOW (0.50) |
 | ≥1%                 | LOW (0.30) |
 
-### Tier 3: Open Mass-Shift Detection
+#### Tier 3: Open Mass-Shift Detection
 
 Detects common variable modifications by looking for precursor mass pairs separated by known PTM mass shifts, with statistical scoring to distinguish real modifications from random coincidences.
 
@@ -219,7 +275,7 @@ Detects common variable modifications by looking for precursor mass pairs separa
 | ≥2.0× | MEDIUM (0.70) |
 | ≥1.5× | LOW (0.50) |
 
-### Multi-File Aggregation
+#### Multi-File Aggregation
 
 When multiple files are analyzed, per-file PTM results are aggregated:
 - Evidence counts and spectra scanned are summed across files.
