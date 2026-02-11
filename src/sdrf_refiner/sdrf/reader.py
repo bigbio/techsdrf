@@ -229,6 +229,19 @@ class SDRFReader:
         if iw_col in self.df.columns and row[iw_col]:
             params["isolation_window_width"] = self._parse_numeric_mz(row[iw_col])
 
+        # Modification parameters (may span multiple duplicate columns)
+        mod_col_base = "comment[modification parameters]"
+        sdrf_mods = []
+        for col in self.df.columns:
+            if col == mod_col_base or col.startswith(mod_col_base + "."):
+                val = row[col]
+                if val and str(val).strip():
+                    parsed = self._parse_modification_value(str(val).strip())
+                    if parsed:
+                        sdrf_mods.append(parsed)
+        if sdrf_mods:
+            params["modifications"] = sdrf_mods
+
         return params
 
     @staticmethod
@@ -245,6 +258,56 @@ class SDRFReader:
             except ValueError:
                 pass
         return None
+
+    @staticmethod
+    def _parse_modification_value(value: str) -> Optional[Dict[str, Optional[str]]]:
+        """Parse a modification parameter value.
+
+        Format: NT=Oxidation;MT=variable;TA=M;AC=UNIMOD:35
+
+        Returns:
+            Dict with name, accession, modification_type, target_amino_acids, position.
+            None if value is empty or unparseable.
+        """
+        if not value or pd.isna(value):
+            return None
+
+        value = str(value).strip().strip('"')
+        if not value:
+            return None
+
+        result: Dict[str, Optional[str]] = {
+            "name": None,
+            "accession": None,
+            "modification_type": None,
+            "target_amino_acids": None,
+            "position": None,
+        }
+
+        nt_match = re.search(r"NT=([^;]+)", value, re.IGNORECASE)
+        if nt_match:
+            result["name"] = nt_match.group(1).strip()
+
+        ac_match = re.search(r"AC=([^;]+)", value, re.IGNORECASE)
+        if ac_match:
+            result["accession"] = ac_match.group(1).strip()
+
+        mt_match = re.search(r"MT=([^;]+)", value, re.IGNORECASE)
+        if mt_match:
+            result["modification_type"] = mt_match.group(1).strip().lower()
+
+        ta_match = re.search(r"TA=([^;]+)", value, re.IGNORECASE)
+        if ta_match:
+            result["target_amino_acids"] = ta_match.group(1).strip()
+
+        pp_match = re.search(r"PP=([^;]+)", value, re.IGNORECASE)
+        if pp_match:
+            result["position"] = pp_match.group(1).strip()
+
+        if result["name"] is None and result["accession"] is None:
+            return None
+
+        return result
 
     @staticmethod
     def parse_ontology_value(value: str) -> Dict[str, Optional[str]]:

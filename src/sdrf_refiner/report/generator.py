@@ -55,6 +55,7 @@ class ReportGenerator:
         self.report_lines = []
         self._changes = changes or []
         self._detected_params = detected_params
+        self._sdrf_params = sdrf_params
         self._ptm_results = ptm_results or []
 
         # Header
@@ -303,8 +304,17 @@ class ReportGenerator:
 
         self._add_line()
 
+    def _build_sdrf_unimod_set(self) -> set:
+        """Build a set of uppercased UNIMOD accessions from SDRF modifications."""
+        sdrf_mods = self._sdrf_params.get("modifications", [])
+        return {
+            m["accession"].upper()
+            for m in sdrf_mods
+            if m.get("accession")
+        }
+
     def _add_ptm_detection_section(self, detected_params: Dict[str, Any]) -> None:
-        """Add PTM detection results section."""
+        """Add PTM detection results section with SDRF comparison."""
         ptm_data = detected_params.get("ptm_detection")
         if not ptm_data:
             return
@@ -314,11 +324,15 @@ class ReportGenerator:
             return
 
         n_files = ptm_data.get("n_files", 0)
+        sdrf_unimod_set = self._build_sdrf_unimod_set()
 
         self._add_line("PTM DETECTION")
         self._add_line("-" * 40)
         self._add_line(f"  Files analyzed for PTMs: {n_files}")
         self._add_line()
+
+        # Collect all detected UNIMOD accessions for the "not detected" section
+        detected_unimod_set: set = set()
 
         tier_names = {1: "Reporter Ions", 2: "Diagnostic Ions", 3: "Mass Shifts"}
         for tier in [1, 2, 3]:
@@ -328,7 +342,28 @@ class ReportGenerator:
 
             self._add_line(f"  {tier_names[tier]}:")
             for hit in tier_hits:
-                self._add_line(f"    {self._format_ptm_hit(hit, tier, n_files)}")
+                unimod = hit.get("unimod_accession", "")
+                if unimod:
+                    detected_unimod_set.add(unimod.upper())
+                self._add_line(
+                    f"    {self._format_ptm_hit(hit, tier, n_files, sdrf_unimod_set)}"
+                )
+            self._add_line()
+
+        # SDRF-only modifications (not detected from spectra)
+        sdrf_mods = self._sdrf_params.get("modifications", [])
+        sdrf_only = [
+            m for m in sdrf_mods
+            if m.get("accession") and m["accession"].upper() not in detected_unimod_set
+        ]
+        if sdrf_only:
+            self._add_line("  Not detected (in SDRF only):")
+            for m in sdrf_only:
+                name = m.get("name", "unknown")
+                acc = m.get("accession", "")
+                mt = m.get("modification_type", "")
+                mt_str = f" [{mt}]" if mt else ""
+                self._add_line(f"    {name} ({acc}){mt_str}")
             self._add_line()
 
         # Per-file PTM summary
@@ -346,7 +381,13 @@ class ReportGenerator:
                     self._add_line(f"    {fname}: no PTMs detected")
             self._add_line()
 
-    def _format_ptm_hit(self, hit: Dict[str, Any], tier: int, n_files: int) -> str:
+    def _format_ptm_hit(
+        self,
+        hit: Dict[str, Any],
+        tier: int,
+        n_files: int,
+        sdrf_unimod_set: set,
+    ) -> str:
         """Format a single PTM hit for the report."""
         name = hit["name"]
         unimod = hit["unimod_accession"]
@@ -356,18 +397,21 @@ class ReportGenerator:
         files_det = hit["files_detected"]
         mod_type = hit.get("modification_type", "variable")
 
+        # Compare against SDRF
+        sdrf_status = "match" if unimod.upper() in sdrf_unimod_set else "new"
+
         if tier == 1:
             pct = (evidence / scanned * 100) if scanned > 0 else 0
             return (
                 f"{name} ({unimod}): detected in {pct:.0f}% of spectra "
-                f"({files_det}/{n_files} files) [{conf_label}] [{mod_type}]"
+                f"({files_det}/{n_files} files) [{conf_label}] [{mod_type}] [{sdrf_status}]"
             )
 
         if tier == 2:
             pct = (evidence / scanned * 100) if scanned > 0 else 0
             return (
                 f"{name} ({unimod}): {pct:.1f}% of spectra "
-                f"({evidence} observations) [{conf_label}] [{mod_type}]"
+                f"({evidence} observations) [{conf_label}] [{mod_type}] [{sdrf_status}]"
             )
 
         # Tier 3: mass shifts with enrichment stats
@@ -385,7 +429,7 @@ class ReportGenerator:
 
         return (
             f"{name}{delta_str} ({unimod}): {evidence} observations "
-            f"({files_det}/{n_files} files) [{conf_label}] [{mod_type}]{stats_str}"
+            f"({files_det}/{n_files} files) [{conf_label}] [{mod_type}] [{sdrf_status}]{stats_str}"
         )
 
     def _add_changes_section(self) -> None:
