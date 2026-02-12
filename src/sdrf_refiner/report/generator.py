@@ -445,7 +445,7 @@ class ReportGenerator:
         stats_str = f" ({', '.join(stats_parts)})" if stats_parts else ""
 
         return (
-            f"{name}{delta_str} ({unimod}): {evidence} observations "
+            f"{name}{delta_str} ({unimod}): {evidence} unique pairs "
             f"({files_det}/{n_files} files) [{conf_label}] [{mod_type}] [{sdrf_status}]{stats_str}"
         )
 

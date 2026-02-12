@@ -23,10 +23,17 @@ logger = logging.getLogger(__name__)
 TOP_N_MASS_SHIFTS = 5
 
 # Minimum observations to report a mass shift
-MASS_SHIFT_MIN_OBS = 50
+MASS_SHIFT_MIN_OBS = 20
 
 # Proton mass for neutral mass calculation
 PROTON_MASS = 1.00728
+
+# Quality filters for Tier 3 precursor mass collection
+MIN_PEAKS_QUALITY = 15  # minimum fragment peaks for a spectrum to be used
+MIN_CHARGE_QUALITY = 2  # minimum precursor charge (skip 0=unknown, 1=non-peptide)
+MIN_NEUTRAL_MASS = 400.0  # Da — lower bound for peptide masses
+MAX_NEUTRAL_MASS = 6000.0  # Da — upper bound for peptide masses
+DEDUP_BIN_WIDTH = 0.01  # Da — bin width for unique mass deduplication
 
 
 # =============================================================================
@@ -578,23 +585,35 @@ class PTMDetector:
         For each known PTM mass shift, counts precursor mass pairs
         separated by that shift, then scores against a uniform-density
         null model using Poisson statistics.
+
+        Quality filtering and deduplication are applied to reduce noise:
+        - Spectra with < MIN_PEAKS_QUALITY fragment peaks are excluded
+        - Spectra with charge < MIN_CHARGE_QUALITY are excluded
+        - Neutral masses outside MIN_NEUTRAL_MASS–MAX_NEUTRAL_MASS are excluded
+        - Masses are deduplicated to unique species (binned at DEDUP_BIN_WIDTH Da)
         """
-        masses = self._collect_precursor_masses(spectra)
-        if len(masses) < 10:
+        all_masses, unique_masses = self._collect_precursor_masses(spectra)
+
+        logger.debug(
+            f"Tier 3 quality filter: {len(spectra)} spectra -> "
+            f"{len(all_masses)} passed -> {len(unique_masses)} unique masses"
+        )
+
+        if len(unique_masses) < 10:
             return []
 
-        n_total = len(masses)
-        masses = np.sort(masses)
+        n_unique = len(unique_masses)
+        masses = np.sort(unique_masses)
 
         mass_range = masses[-1] - masses[0]
         if mass_range <= 0:
             return []
-        density = n_total / mass_range
+        density = n_unique / mass_range
 
         candidates = []
         for shift in KNOWN_MASS_SHIFTS:
             count = self._count_mass_pairs(masses, abs(shift.delta), shift.tolerance)
-            expected = max(n_total * density * 2 * shift.tolerance, 0.1)
+            expected = max(n_unique * density * 2 * shift.tolerance, 0.1)
             enrichment = count / expected
             p_value = self._poisson_sf(count, expected) if count > 0 else 1.0
 
@@ -629,7 +648,7 @@ class PTMDetector:
                 unimod_accession=shift.unimod,
                 tier=3,
                 evidence_count=c["count"],
-                total_spectra_scanned=n_total,
+                total_spectra_scanned=n_unique,
                 confidence=confidence,
                 modification_type=mod_type,
                 mass_delta=shift.delta,
@@ -641,16 +660,49 @@ class PTMDetector:
         return hits
 
     @staticmethod
-    def _collect_precursor_masses(spectra: List[Dict[str, Any]]) -> np.ndarray:
-        """Convert precursor m/z values to neutral masses."""
+    def _collect_precursor_masses(
+        spectra: List[Dict[str, Any]],
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Collect and filter precursor neutral masses from MS2 spectra.
+
+        Applies quality gates:
+        - Minimum fragment peak count (MIN_PEAKS_QUALITY)
+        - Minimum charge state (MIN_CHARGE_QUALITY)
+        - Neutral mass within peptide range (MIN/MAX_NEUTRAL_MASS)
+
+        Then deduplicates by binning to DEDUP_BIN_WIDTH Da resolution.
+
+        Returns:
+            Tuple of (all_filtered_masses, unique_masses) as numpy arrays.
+        """
         masses = []
         for sp in spectra:
             mz = sp["precursor_mz"]
             if mz is None or mz <= 0:
                 continue
-            charge = sp["precursor_charge"] or 2
-            masses.append((mz - PROTON_MASS) * charge)
-        return np.array(masses)
+            charge = sp["precursor_charge"]
+            # Skip unknown charge (0) and singly-charged (non-peptide in ESI)
+            if charge < MIN_CHARGE_QUALITY:
+                continue
+            # Skip spectra with too few fragment peaks
+            if len(sp["mz"]) < MIN_PEAKS_QUALITY:
+                continue
+            neutral_mass = (mz - PROTON_MASS) * charge
+            # Skip masses outside peptide range
+            if neutral_mass < MIN_NEUTRAL_MASS or neutral_mass > MAX_NEUTRAL_MASS:
+                continue
+            masses.append(neutral_mass)
+
+        all_masses = np.array(masses) if masses else np.array([], dtype=float)
+
+        # Deduplicate: bin to DEDUP_BIN_WIDTH resolution, keep unique
+        if len(all_masses) > 0:
+            binned = np.round(all_masses / DEDUP_BIN_WIDTH) * DEDUP_BIN_WIDTH
+            unique_masses = np.unique(binned)
+        else:
+            unique_masses = np.array([], dtype=float)
+
+        return all_masses, unique_masses
 
     @staticmethod
     def _count_mass_pairs(

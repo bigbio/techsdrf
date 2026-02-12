@@ -219,34 +219,41 @@ Identifies PTMs that produce characteristic fragment signatures: neutral losses 
 Detects common variable modifications by looking for precursor mass pairs separated by known PTM mass shifts, with statistical scoring to distinguish real modifications from random coincidences.
 
 **Method:**
-1. **Collect precursor neutral masses** from all MS2 spectra:
+1. **Collect and filter precursor neutral masses** from MS2 spectra:
    `neutral_mass = (precursor_mz − 1.00728) × charge`
 
-2. **Count mass pairs** for each known PTM shift: for every precursor mass *M* in the sorted array, use binary search to check whether *M* + Δ (the PTM mass shift) exists within ±0.02 Da. This identifies unmodified/modified peptide pairs.
+   Quality gates applied before mass pairing:
+   - Minimum 15 fragment peaks (removes noise triggers)
+   - Charge state ≥ 2 (skips unknown and singly-charged non-peptide precursors)
+   - Neutral mass in 400–6000 Da (peptide range)
 
-3. **Null model — expected random matches:** Under the assumption that precursor masses are uniformly distributed:
+2. **Deduplicate to unique species:** Masses are binned to 0.01 Da resolution and deduplicated. This converts the metric from "number of MS2 scans" to "number of distinct precursor species", reducing inflation from repeated fragmentation of the same peptide and improving the accuracy of the null model which assumes uniform mass density.
+
+3. **Count mass pairs** for each known PTM shift: for every unique precursor mass *M* in the sorted array, use binary search to check whether *M* + Δ (the PTM mass shift) exists within ±0.02 Da. This identifies unmodified/modified peptide pairs.
+
+4. **Null model — expected random matches:** Under the assumption that unique precursor masses are uniformly distributed:
    ```
-   density = N / mass_range          (masses per Da)
+   density = N / mass_range          (unique masses per Da)
    E[matches] = N × density × 2×tol  (expected random pairs)
    ```
 
-4. **Enrichment scoring:**
+5. **Enrichment scoring:**
    ```
    enrichment = observed_count / expected_count
    ```
    An enrichment of 4× means the modification is observed 4 times more often than expected by chance.
 
-5. **Statistical significance** via Poisson survival function:
+6. **Statistical significance** via Poisson survival function:
    ```
    p-value = P(X ≥ observed | λ = expected)
    probability = 1 − p-value
    ```
    Uses `scipy.stats.poisson.sf` when available, with fallback to normal approximation (large λ) or direct log-space summation (small λ).
 
-6. **Filtering and ranking:**
+7. **Filtering and ranking:**
    - Enrichment > 1.5×
    - p-value < 0.01
-   - Minimum 50 observations
+   - Minimum 20 unique pairs
    - Ranked by enrichment, top 5 reported
 
 **Known mass shifts searched:**
