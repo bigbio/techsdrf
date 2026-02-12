@@ -20,10 +20,12 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Maximum number of mass-shift PTMs to report per file
-TOP_N_MASS_SHIFTS = 5
+TOP_N_MASS_SHIFTS = 10
 
-# Minimum observations to report a mass shift
-MASS_SHIFT_MIN_OBS = 20
+# Minimum unique mass pairs to report a mass shift (lowered from 50
+# because deduplication greatly reduces counts; enrichment and p-value
+# are the primary quality filters)
+MASS_SHIFT_MIN_OBS = 5
 
 # Proton mass for neutral mass calculation
 PROTON_MASS = 1.00728
@@ -173,8 +175,10 @@ KNOWN_MASS_SHIFTS: List[MassShift] = [
     MassShift("Propionamide", "UNIMOD:24", 71.0371, 0.02),
     MassShift("Pyro-glu from Q", "UNIMOD:28", -17.0265, 0.02),
     MassShift("Pyro-glu from E", "UNIMOD:27", -18.0106, 0.02),
-    MassShift("Sulfo", "UNIMOD:40", 79.9568, 0.02),
+    # Sulfo (79.9568) removed: indistinguishable from Phospho (79.9663)
+    # at 0.02 Da tolerance. Phospho is far more common in proteomics.
     MassShift("Formyl", "UNIMOD:122", 27.9949, 0.02),
+    MassShift("Dioxidation", "UNIMOD:425", 31.9898, 0.02),
 ]
 
 # UNIMOD accessions of modifications typically applied as fixed in sample prep

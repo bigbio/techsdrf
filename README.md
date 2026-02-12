@@ -253,8 +253,8 @@ Detects common variable modifications by looking for precursor mass pairs separa
 7. **Filtering and ranking:**
    - Enrichment > 1.5×
    - p-value < 0.01
-   - Minimum 20 unique pairs
-   - Ranked by enrichment, top 5 reported
+   - Minimum 5 unique pairs
+   - Ranked by enrichment, top 10 reported
 
 **Known mass shifts searched:**
 
@@ -271,8 +271,8 @@ Detects common variable modifications by looking for precursor mass pairs separa
 | Propionamide | +71.037 | UNIMOD:24 |
 | Pyro-glu from Q | −17.027 | UNIMOD:28 |
 | Pyro-glu from E | −18.011 | UNIMOD:27 |
-| Sulfo | +79.957 | UNIMOD:40 |
 | Formyl | +27.995 | UNIMOD:122 |
+| Dioxidation | +31.990 | UNIMOD:425 |
 
 **Confidence scoring (from enrichment):**
 | Enrichment | Confidence |
