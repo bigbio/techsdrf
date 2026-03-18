@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 
-from sdrf_refiner.downloader_base import BaseDownloader
+from sdrf_refiner.downloader_base import BaseDownloader, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -143,14 +143,15 @@ class MassiveDownloader(BaseDownloader):
         Returns:
             Path to downloaded file or None if failed
         """
-        output_path = self.download_dir / filename
+        safe_name = sanitize_filename(filename)
+        output_path = self.download_dir / safe_name
 
         # Check if already downloaded
         if output_path.exists():
-            logger.info(f"File already exists: {filename}")
+            logger.info(f"File already exists: {safe_name}")
             return output_path
 
-        # Look up in index
+        # Look up in index (use original filename for FTP path lookup)
         ftp_path = self.file_index.get(filename)
         if ftp_path is None:
             logger.error(

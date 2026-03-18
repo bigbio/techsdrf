@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from sdrf_refiner.downloader_base import BaseDownloader
+from sdrf_refiner.downloader_base import BaseDownloader, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -52,18 +52,18 @@ class PrideDownloader(BaseDownloader):
             logger.debug(f"PRIDE API request failed: {e}")
         return None
 
-    def _download_via_http_no_timeout(self, http_url: str, output_path: Path) -> bool:
+    def _download_via_http(self, http_url: str, output_path: Path) -> bool:
         """
-        Download file via HTTP with no timeout (for large files).
-        Uses streaming with no read/connect timeout.
+        Download file via HTTP with a connect timeout.
+        Uses streaming; the read timeout is generous to support large files.
         Writes to a .part file and renames atomically on completion.
         """
         part_path = output_path.with_suffix(output_path.suffix + ".part")
         try:
             session = requests.Session()
             session.headers["User-Agent"] = "techsdrf/1.0"
-            # No timeout - allow arbitrarily long downloads for large RAW files
-            with session.get(http_url, stream=True, timeout=None) as r:
+            # (connect_timeout, read_timeout) — 30 s connect, 5 min per chunk
+            with session.get(http_url, stream=True, timeout=(30, 300)) as r:
                 r.raise_for_status()
                 total = int(r.headers.get("content-length", 0))
                 with open(part_path, "wb") as f:
@@ -98,14 +98,15 @@ class PrideDownloader(BaseDownloader):
         Returns:
             Path to downloaded file or None if failed
         """
-        output_path = self.download_dir / filename
+        safe_name = sanitize_filename(filename)
+        output_path = self.download_dir / safe_name
 
         # Check if already downloaded
         if output_path.exists():
-            logger.info(f"File already exists: {filename}")
+            logger.info(f"File already exists: {safe_name}")
             return output_path
 
-        logger.info(f"Downloading {filename} from {self.pride_accession}...")
+        logger.info(f"Downloading {safe_name} from {self.pride_accession}...")
 
         # 1. Try direct HTTP (no timeout) via Globus mirror
         meta = self._fetch_file_metadata(filename)
@@ -114,8 +115,8 @@ class PrideDownloader(BaseDownloader):
                 val = loc.get("value", "")
                 if val.startswith(FTP_BASE):
                     http_url = val.replace(FTP_BASE, GLOBUS_HTTP_BASE)
-                    logger.info(f"Using HTTP download (no timeout)")
-                    if self._download_via_http_no_timeout(http_url, output_path):
+                    logger.info(f"Using HTTP download")
+                    if self._download_via_http(http_url, output_path):
                         logger.info(f"Downloaded: {filename} (via HTTP)")
                         return output_path
                     break

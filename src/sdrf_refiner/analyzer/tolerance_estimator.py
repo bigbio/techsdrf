@@ -561,13 +561,14 @@ class CruxEstimator:
             mzml_path = input_path
 
         # Stream a patched copy into the temp dir (original stays intact).
-        # Use binary mode to safely handle mzML files that may contain non-
-        # UTF-8 bytes in base64-encoded spectrum data.
+        # Replace MS:1003145 (Astral mass analyzer) → MS:1000615 (Orbitrap)
+        # so that Crux param-medic recognises the analyzer type.
+        # Use the full accession string to avoid corrupting base64 data.
         fixed_mzml = work_dir / f"{mzml_path.stem}_crux.mzML"
         with open(mzml_path, "rb") as infile, \
              open(fixed_mzml, "wb") as outfile:
             for line in infile:
-                outfile.write(line.replace(b"1003145", b"1000615"))
+                outfile.write(line.replace(b"MS:1003145", b"MS:1000615"))
 
         return fixed_mzml
 

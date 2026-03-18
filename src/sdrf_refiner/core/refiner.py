@@ -199,6 +199,12 @@ class SDRFRefiner:
 
             # -- Analyze --
             result = analyzer.analyze(mzml_file)
+            if "error" in result.raw_stats:
+                logger.warning(
+                    f"[{idx}/{total}] Analysis failed for {filename}: "
+                    f"{result.raw_stats['error']}"
+                )
+                continue
             analysis_results.append(result)
             files_processed += 1
             logger.info(

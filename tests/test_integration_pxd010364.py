@@ -137,7 +137,7 @@ class TestPXD010364Integration:
         report_file = self.work_dir / "PXD010364_report.txt"
 
         refiner = SDRFRefiner(
-            pride_accession="PXD010364",
+            accession="PXD010364",
             sdrf_file=MULTIOMICS_SDRF,
             num_files=1,
             output_sdrf=output_sdrf,
@@ -179,7 +179,7 @@ class TestPXD010364Integration:
         report_file = self.work_dir / "PXD010364_report.txt"
 
         refiner = SDRFRefiner(
-            pride_accession="PXD010364",
+            accession="PXD010364",
             sdrf_file=MULTIOMICS_SDRF,
             num_files=1,
             output_sdrf=output_sdrf,

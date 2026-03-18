@@ -548,19 +548,21 @@ class ParameterComparer:
                 status=ComparisonStatus.MATCH,
             )
 
-        # Same numeric value, different unit (e.g. 32 NCE vs 32 eV) - treat as match
+        # Same numeric value AND same unit — treat as match
+        # Different units (e.g. "30 NCE" vs "30 eV") are NOT equivalent
         sdrf_match = re.match(r"^([\d.]+)\s*(%?\s*(?:NCE|eV))", sdrf_val, re.I)
         det_match = re.match(r"^([\d.]+)\s*(%?\s*(?:NCE|eV))", detected_value, re.I)
         if sdrf_match and det_match:
             sdrf_num = float(sdrf_match.group(1))
             det_num = float(det_match.group(1))
-            if abs(sdrf_num - det_num) < 0.01:
+            sdrf_unit = sdrf_match.group(2).strip().upper()
+            det_unit = det_match.group(2).strip().upper()
+            if abs(sdrf_num - det_num) < 0.01 and sdrf_unit == det_unit:
                 return ParameterComparison(
                     parameter_name="collision_energy",
                     sdrf_value=sdrf_value,
                     detected_value=detected_value,
                     status=ComparisonStatus.MATCH,
-                    details={"unit_mismatch": True},
                 )
 
         return ParameterComparison(

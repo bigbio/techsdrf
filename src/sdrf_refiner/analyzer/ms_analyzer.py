@@ -678,7 +678,14 @@ class MSAnalyzer:
         self, stats: Dict, ms_level: str, mass_accuracy: str,
         have_hcd: bool, have_cid: bool, have_etd: bool
     ) -> None:
-        """Update fragmentation stats for a given MS level."""
+        """Update fragmentation stats for a given MS level.
+
+        If mass_accuracy is unknown ("??"), default to "HR" for HCD
+        (typically Orbitrap) and "LR" for CID/ETD (typically ion trap).
+        """
+        if mass_accuracy == "??":
+            mass_accuracy = "HR" if have_hcd else "LR"
+
         dissociation_sum = int(have_hcd) + int(have_cid) + int(have_etd)
 
         if dissociation_sum == 1:
@@ -695,16 +702,25 @@ class MSAnalyzer:
                 stats[f"n_{ms_level}_{mass_accuracy}_ETciD_spectra"] += 1
 
     def _detect_fragmentation_cv(self, spectrum: Dict, stats: Dict) -> None:
-        """Detect fragmentation type from CV terms."""
-        # Check for dissociation method CV terms
-        if "HCD" in str(spectrum) or "beam-type collision-induced dissociation" in str(
-            spectrum
-        ):
+        """Detect fragmentation type from CV terms in the activation element.
+
+        Checks pyteomics-parsed activation dict keys for dissociation method
+        CV term names rather than doing a naive string search on the entire
+        spectrum dict.
+        """
+        # Collect activation CV term names from all precursors
+        activation_keys: set = set()
+        for precursor in spectrum.get("precursorList", {}).get("precursor", []):
+            act = precursor.get("activation", {})
+            activation_keys.update(act.keys())
+
+        # Map CV term names to fragmentation types
+        if "beam-type collision-induced dissociation" in activation_keys:
             stats["n_ms2_HR_HCD_spectra"] = stats.get("n_ms2_HR_HCD_spectra", 0) + 1
-        elif "CID" in str(spectrum) or "collision-induced dissociation" in str(
-            spectrum
-        ):
+        elif "collision-induced dissociation" in activation_keys:
             stats["n_ms2_LR_IT_CID_spectra"] = stats.get("n_ms2_LR_IT_CID_spectra", 0) + 1
+        elif "electron transfer dissociation" in activation_keys:
+            stats["n_ms2_HR_IT_ETD_spectra"] = stats.get("n_ms2_HR_IT_ETD_spectra", 0) + 1
 
     def _determine_fragmentation_type(self, stats: Dict) -> None:
         """Determine dominant fragmentation type for MS2 and MS3 separately."""

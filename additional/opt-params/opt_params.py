@@ -261,7 +261,7 @@ class SageRunner:
                 param_data["database"]["fragment_min_mz"] = 150
                 fragment_min_mz = 150
             if "fragment_max_mz" in param_data["database"]:
-                fragment_max_mz = param_data["database"]["fragment_min_mz"]
+                fragment_max_mz = param_data["database"]["fragment_max_mz"]
             else:
                 param_data["database"]["fragment_max_mz"] = 2000
                 fragment_max_mz = 2000

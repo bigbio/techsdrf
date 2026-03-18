@@ -7,11 +7,28 @@ must implement.
 """
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def sanitize_filename(filename: str) -> str:
+    """Sanitize a filename to prevent path traversal attacks.
+
+    Strips directory components and rejects names that would escape
+    the target directory (e.g. ``../../etc/passwd``).
+
+    Raises:
+        ValueError: If the filename is empty or attempts path traversal.
+    """
+    # Take only the basename to strip directory components
+    safe = os.path.basename(filename)
+    if not safe or safe in (".", ".."):
+        raise ValueError(f"Invalid filename: {filename!r}")
+    return safe
 
 
 class BaseDownloader(ABC):
@@ -61,12 +78,17 @@ class BaseDownloader(ABC):
         else:
             extensions = list(self.EXTENSION_MAP.keys())
 
-        # Filter filenames by extension
+        # Filter filenames by extension (sanitize to prevent path traversal)
         raw_filenames = []
         for filename in filenames:
-            ext = Path(filename).suffix.lower()
+            try:
+                safe_name = sanitize_filename(filename)
+            except ValueError:
+                logger.warning(f"Skipping invalid filename: {filename!r}")
+                continue
+            ext = Path(safe_name).suffix.lower()
             if ext in extensions:
-                raw_filenames.append(filename)
+                raw_filenames.append(safe_name)
 
         # Remove duplicates while preserving order
         seen: set = set()

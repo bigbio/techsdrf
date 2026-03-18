@@ -16,7 +16,7 @@ INSTRUMENT_TERMS = {
     "Orbitrap Fusion Lumos": "MS:1002732",
     "Orbitrap Eclipse": "MS:1003029",
     "Orbitrap Exploris 480": "MS:1003028",
-    "Orbitrap Exploris 240": "MS:1003096",
+    "Orbitrap Exploris 240": "MS:1003094",
     "Orbitrap Exploris 120": "MS:1003095",
     "Orbitrap Astral": "MS:1003378",
     "LTQ Orbitrap": "MS:1000449",
