@@ -46,10 +46,17 @@ conda activate techsdrf
 pip install -e .
 ```
 
+**Note**: Python 3.9–3.11 is required. Python 3.12+ is not yet supported due to pyopenms compatibility.
+
 ### Using pip
 
 ```bash
 pip install techsdrf
+```
+
+The installable package is `techsdrf`; the importable module is `sdrf_refiner`:
+```python
+from sdrf_refiner.core.refiner import SDRFRefiner
 ```
 
 **Note**: ThermoRawFileParser must be installed separately for Thermo RAW file support:
@@ -256,6 +263,13 @@ Detects common variable modifications by looking for precursor mass pairs separa
    - Minimum 5 unique pairs
    - Ranked by enrichment, top 10 reported
 
+8. **Spectral alignment validation:** For each significant mass shift, individual mass pairs are validated by aligning their fragment spectra:
+   - Retrieve the representative MS2 spectrum for each mass in the pair (M, M+Δ). When multiple spectra map to the same unique mass bin, the spectrum with the most fragment peaks is used.
+   - Select the **top 50 most intense peaks** from each spectrum.
+   - Align the two peak lists using **pyopenms `SpectrumAligner`** with 20 ppm relative tolerance.
+   - A pair is **validated** if ≥4 peaks are aligned (shared fragment ions between modified and unmodified peptide).
+   - The validated pair count is reported alongside the raw pair count for each PTM.
+
 **Known mass shifts searched:**
 
 | Modification | Δ mass (Da) | UNIMOD |
@@ -273,6 +287,7 @@ Detects common variable modifications by looking for precursor mass pairs separa
 | Pyro-glu from E | −18.011 | UNIMOD:27 |
 | Formyl | +27.995 | UNIMOD:122 |
 | Dioxidation | +31.990 | UNIMOD:425 |
+| Ammonia-loss | −17.027 | UNIMOD:385 |
 
 **Confidence scoring (from enrichment):**
 | Enrichment | Confidence |
@@ -323,13 +338,23 @@ PTM DETECTION
 - **SAGE integration**: Empirical tolerance estimation via [Sage](https://github.com/lazear/sage) database search optimization could be added to refine precursor and fragment mass tolerances by grid search over a FASTA database. This would complement the existing Gaussian (RunAssessor) and Crux param-medic methods.
 - **PTM auto-apply**: Optional `--apply-ptm` flag to write detected PTMs to SDRF `comment[modification parameters]` columns.
 
+## Additional Tools
+
+The `additional/` directory contains supplementary tools:
+
+- **`opt-params/`**: SAGE-based parameter optimization for precursor and fragment mass tolerances via grid search over a FASTA database.
+- **`sdrf-split/`**: Utility for splitting SDRF files.
+
+See `additional/opt-params/README.md` for details.
+
 ## Dependencies
 
-- Python >= 3.9
+- Python >= 3.9, < 3.12
 - numpy, scipy, pandas
 - pyopenms (for mzML parsing and spectrum access)
 - sdrf-pipelines (for SDRF validation)
 - pridepy (for PRIDE API access)
+- tqdm (for download progress bars)
 - runassessor (for Gaussian tolerance estimation)
 - ThermoRawFileParser (for Thermo RAW conversion)
 - ProteoWizard msconvert (for Bruker/SCIEX conversion)

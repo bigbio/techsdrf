@@ -98,3 +98,6 @@ Thumbs.db
 output/
 results/
 downloads/
+.claude/
+mzml/
+test_run/

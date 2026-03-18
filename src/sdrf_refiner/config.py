@@ -40,8 +40,8 @@ VENDOR_EXTENSIONS = {
     "waters": [".raw"],  # Waters also uses .raw
 }
 
-# PRIDE API base URL
-PRIDE_API_BASE = "https://www.ebi.ac.uk/pride/ws/archive/v2"
+# PRIDE API base URL (v3)
+PRIDE_API_BASE = "https://www.ebi.ac.uk/pride/ws/archive/v3"
 
 # Tolerance comparison threshold (20% difference is acceptable)
 TOLERANCE_MATCH_THRESHOLD = 0.2
@@ -63,7 +63,7 @@ TOLERANCE_DIVERGENCE_HARD = 10.0
 # SDRF column names
 # =============================================================================
 # Maps internal parameter keys → SDRF column headers as defined in the
-# sdrf-templates YAML schemas (dda-acquisition, dia-acquisition, ms-proteomics).
+# sdrf-templates YAML schemas (dia-acquisition, ms-proteomics).
 
 SDRF_COLUMNS: Dict[str, str] = {
     "instrument": "comment[instrument]",

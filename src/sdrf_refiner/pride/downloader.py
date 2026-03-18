@@ -56,7 +56,9 @@ class PrideDownloader(BaseDownloader):
         """
         Download file via HTTP with no timeout (for large files).
         Uses streaming with no read/connect timeout.
+        Writes to a .part file and renames atomically on completion.
         """
+        part_path = output_path.with_suffix(output_path.suffix + ".part")
         try:
             session = requests.Session()
             session.headers["User-Agent"] = "techsdrf/1.0"
@@ -64,7 +66,7 @@ class PrideDownloader(BaseDownloader):
             with session.get(http_url, stream=True, timeout=None) as r:
                 r.raise_for_status()
                 total = int(r.headers.get("content-length", 0))
-                with open(output_path, "wb") as f:
+                with open(part_path, "wb") as f:
                     downloaded = 0
                     last_log_mb = 0
                     for chunk in r.iter_content(chunk_size=1024 * 1024):
@@ -76,11 +78,12 @@ class PrideDownloader(BaseDownloader):
                                 last_log_mb = mb
                                 pct = 100 * downloaded / total if total else 0
                                 logger.info(f"  Progress: {downloaded / (1024**3):.1f} GB ({pct:.0f}%)")
+            part_path.rename(output_path)
             return output_path.exists()
         except Exception as e:
             logger.warning(f"HTTP download failed: {e}")
-            if output_path.exists():
-                output_path.unlink()
+            if part_path.exists():
+                part_path.unlink()
             return False
 
     def download_file_by_name(self, filename: str) -> Optional[Path]:

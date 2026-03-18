@@ -103,11 +103,20 @@ def _tolerance_confidence(
             if r.precursor_tolerance_ppm is not None
         ]
     else:
-        values = [
-            r.fragment_tolerance_ppm or r.fragment_tolerance_da
+        # Use ppm values only to avoid mixing units; fall back to Da-only
+        ppm_values = [
+            r.fragment_tolerance_ppm
             for r in results
-            if r.fragment_tolerance_ppm is not None or r.fragment_tolerance_da is not None
+            if r.fragment_tolerance_ppm is not None
         ]
+        if ppm_values:
+            values = ppm_values
+        else:
+            values = [
+                r.fragment_tolerance_da
+                for r in results
+                if r.fragment_tolerance_da is not None
+            ]
 
     if not values:
         return 0.3  # No values detected

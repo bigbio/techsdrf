@@ -780,7 +780,7 @@ class ToleranceEstimator:
 
         agreeing = [
             i for i, v in enumerate(values)
-            if abs(v - median_val) / median_val <= agreement_threshold
+            if median_val == 0 or abs(v - median_val) / abs(median_val) <= agreement_threshold
         ]
 
         if len(agreeing) == len(values):

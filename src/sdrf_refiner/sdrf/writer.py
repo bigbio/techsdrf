@@ -240,7 +240,7 @@ class SDRFWriter:
             Formatted string for SDRF or None
         """
         detected = refinement.detected_value
-        if not detected:
+        if detected is None:
             return None
 
         param = refinement.parameter_name

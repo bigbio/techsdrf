@@ -68,11 +68,12 @@ DISSOCIATION_TERMS = {
 }
 
 # Acquisition method CV terms (PRIDE ontology)
+# Must match ACQUISITION_ONTOLOGY in config.py
 ACQUISITION_TERMS = {
-    "Data-dependent acquisition": "PRIDE:0000627",
-    "Data-independent acquisition": "PRIDE:0000628",
-    "DDA": "PRIDE:0000627",
-    "DIA": "PRIDE:0000628",
+    "Data-dependent acquisition": "PRIDE:0000427",
+    "Data-independent acquisition": "PRIDE:0000451",
+    "DDA": "PRIDE:0000427",
+    "DIA": "PRIDE:0000451",
 }
 
 

@@ -513,7 +513,7 @@ class ParameterComparer:
         """
         Compare collision energy values.
 
-        SDRF spec (dda-acquisition, dia-acquisition):
+        SDRF spec (ms-proteomics, dia-acquisition):
         Pattern: ^\\d+(\\.\\d+)?%? (NCE|eV)(;\\d+(\\.\\d+)?%? (NCE|eV))*$|^not available$
         Valid: "30 NCE", "30% NCE", "27 eV", "25 NCE;27 NCE;30 NCE", "not available"
         """

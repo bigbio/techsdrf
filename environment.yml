@@ -28,7 +28,7 @@ channels:
 
 dependencies:
   # ---------------------------------------------------------------------------
-  # Python version (3.9-3.11 supported, 3.12 has compatibility issues)
+  # Python version (3.9-3.11 supported; 3.12 has pyopenms compatibility issues)
   # ---------------------------------------------------------------------------
   - python>=3.9,<3.12
 
@@ -48,6 +48,7 @@ dependencies:
   # MS file parsing (mzML)
   # ---------------------------------------------------------------------------
   - pyteomics>=4.5
+  - pyopenms>=2.9
 
   # ---------------------------------------------------------------------------
   # Raw file conversion tools
@@ -79,8 +80,7 @@ dependencies:
   # ---------------------------------------------------------------------------
   - pytest>=7.0
   - pytest-cov>=3.0
-  - black>=22.0
-  - isort>=5.10
+  - ruff>=0.1.0
 
   # ---------------------------------------------------------------------------
   # pip-only dependencies
@@ -94,4 +94,4 @@ dependencies:
       - pridepy>=0.0.4
 
       # Tolerance estimation (RunAssessor, Gaussian fitting)
-      - runassessor
+      - runassessor @ git+https://github.com/RunAssessor/RunAssessor.git@eb5cbb98c3c1cea0d97e5da99fba3c902946c21d

@@ -532,12 +532,12 @@ class MSAnalyzer:
                                 except (TypeError, ValueError):
                                     pass
                             elif ce_val is not None:
-                                # MS:1000045 - mzML uses eV; Thermo often reports NCE
-                                # Spec: "30 NCE", "27 eV", "30% NCE"
+                                # MS:1000045 "collision energy" is always in eV per
+                                # the PSI-MS ontology.  NCE is reported via
+                                # MS:1000138 "percent collision energy" (handled above).
                                 try:
                                     v = float(ce_val)
-                                    unit = "NCE" if 15 <= v <= 45 else "eV"
-                                    key = f"{int(v) if v == int(v) else v} {unit}"
+                                    key = f"{int(v) if v == int(v) else v} eV"
                                     stats["collision_energies"][key] = (
                                         stats["collision_energies"].get(key, 0) + 1
                                     )
@@ -576,6 +576,8 @@ class MSAnalyzer:
                     if stats["n_spectra"] >= 10000:
                         break
 
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
             logger.warning(f"Error reading spectra: {e}")
 

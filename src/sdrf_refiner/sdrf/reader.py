@@ -63,8 +63,12 @@ class SDRFReader:
         from io import StringIO
 
         # First, read header to get original column names
-        header_line = data_lines[0] if data_lines else ""
-        self._original_columns = header_line.strip().split("\t") if header_line else []
+        if not data_lines:
+            raise ValueError(
+                f"SDRF file has no data lines (only comments or empty): {self.sdrf_path}"
+            )
+        header_line = data_lines[0]
+        self._original_columns = header_line.strip().split("\t")
 
         # Read with pandas but preserve duplicate columns
         self._df = pd.read_csv(
@@ -150,6 +154,17 @@ class SDRFReader:
         # Get parameters from first row (assuming consistent across file)
         if len(self.df) == 0:
             return params
+
+        # Warn if instrument parameters vary across rows
+        if len(self.df) > 1:
+            inst_col = SDRF_COLUMNS["instrument"]
+            if inst_col in self.df.columns:
+                unique_instruments = self.df[inst_col].nunique()
+                if unique_instruments > 1:
+                    logger.warning(
+                        f"SDRF has {unique_instruments} different instruments across rows. "
+                        f"Only the first row's parameters will be used for comparison."
+                    )
 
         row = self.df.iloc[0]
 

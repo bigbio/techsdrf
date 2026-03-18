@@ -37,6 +37,11 @@ MIN_NEUTRAL_MASS = 400.0  # Da — lower bound for peptide masses
 MAX_NEUTRAL_MASS = 6000.0  # Da — upper bound for peptide masses
 DEDUP_BIN_WIDTH = 0.01  # Da — bin width for unique mass deduplication
 
+# Spectral alignment validation for Tier 3
+TOP_N_PEAKS_ALIGN = 50     # keep top N most intense peaks per spectrum for alignment
+MIN_ALIGNED_PEAKS = 4      # minimum aligned peaks to validate a pair
+ALIGNMENT_TOL_PPM = 20.0   # relative tolerance for SpectrumAligner (ppm)
+
 
 # =============================================================================
 # Data classes
@@ -58,6 +63,7 @@ class PTMHit:
     enrichment: Optional[float] = None  # observed/expected ratio (tier 3)
     probability: Optional[float] = None  # 1 - p-value (tier 3)
     expected_random: Optional[float] = None  # expected count under null (tier 3)
+    validated_pairs: Optional[int] = None  # pairs validated by spectral alignment (tier 3)
 
 
 @dataclass
@@ -179,6 +185,9 @@ KNOWN_MASS_SHIFTS: List[MassShift] = [
     # at 0.02 Da tolerance. Phospho is far more common in proteomics.
     MassShift("Formyl", "UNIMOD:122", 27.9949, 0.02),
     MassShift("Dioxidation", "UNIMOD:425", 31.9898, 0.02),
+    # Ammonia-loss shares the same mass shift as Pyro-glu from Q (-17.027 Da)
+    # but has a different biological context (N-terminal Cys vs N-terminal Gln).
+    MassShift("Ammonia-loss", "UNIMOD:385", -17.0265, 0.02),
 ]
 
 # UNIMOD accessions of modifications typically applied as fixed in sample prep
@@ -277,6 +286,7 @@ class PTMDetector:
                         "max_enrichment": None,
                         "max_probability": None,
                         "expected_random": None,
+                        "total_validated": None,
                     }
                 entry = merged[key]
                 entry["total_evidence"] += hit.evidence_count
@@ -299,6 +309,11 @@ class PTMDetector:
                     prev = entry["expected_random"]
                     entry["expected_random"] = (
                         (prev + hit.expected_random) if prev is not None else hit.expected_random
+                    )
+                if hit.validated_pairs is not None:
+                    prev = entry["total_validated"]
+                    entry["total_validated"] = (
+                        (prev + hit.validated_pairs) if prev is not None else hit.validated_pairs
                     )
 
         consensus_hits = sorted(
@@ -596,7 +611,9 @@ class PTMDetector:
         - Neutral masses outside MIN_NEUTRAL_MASS–MAX_NEUTRAL_MASS are excluded
         - Masses are deduplicated to unique species (binned at DEDUP_BIN_WIDTH Da)
         """
-        all_masses, unique_masses = self._collect_precursor_masses(spectra)
+        all_masses, unique_masses, mass_to_spectrum = (
+            self._collect_precursor_masses(spectra)
+        )
 
         logger.debug(
             f"Tier 3 quality filter: {len(spectra)} spectra -> "
@@ -614,6 +631,7 @@ class PTMDetector:
             return []
         density = n_unique / mass_range
 
+        # Pass 1: fast mass-pairing with Poisson enrichment scoring
         candidates = []
         for shift in KNOWN_MASS_SHIFTS:
             count = self._count_mass_pairs(masses, abs(shift.delta), shift.tolerance)
@@ -636,10 +654,20 @@ class PTMDetector:
         ]
         significant.sort(key=lambda c: -c["enrichment"])
 
+        # Pass 2: validate significant candidates by spectral alignment
         hits = []
         for c in significant[:TOP_N_MASS_SHIFTS]:
             shift = c["shift"]
             enrichment = c["enrichment"]
+
+            validated = self._validate_mass_shift_pairs(
+                masses, shift, mass_to_spectrum
+            )
+            logger.debug(
+                f"Tier 3 alignment: {shift.name} — "
+                f"{c['count']} pairs, {validated} validated"
+            )
+
             confidence = self._fraction_to_confidence(
                 enrichment,
                 thresholds=[(5.0, 0.95), (3.0, 0.85), (2.0, 0.7), (0.0, 0.5)],
@@ -659,6 +687,7 @@ class PTMDetector:
                 enrichment=round(enrichment, 2),
                 probability=round(c["probability"], 4),
                 expected_random=round(c["expected"], 1),
+                validated_pairs=validated,
             ))
 
         return hits
@@ -666,7 +695,7 @@ class PTMDetector:
     @staticmethod
     def _collect_precursor_masses(
         spectra: List[Dict[str, Any]],
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, np.ndarray, Dict[float, Dict[str, np.ndarray]]]:
         """Collect and filter precursor neutral masses from MS2 spectra.
 
         Applies quality gates:
@@ -677,36 +706,49 @@ class PTMDetector:
         Then deduplicates by binning to DEDUP_BIN_WIDTH Da resolution.
 
         Returns:
-            Tuple of (all_filtered_masses, unique_masses) as numpy arrays.
+            Tuple of (all_filtered_masses, unique_masses, mass_to_spectrum).
+            mass_to_spectrum maps each binned mass to the representative
+            spectrum (the one with the most fragment peaks in that bin).
         """
         masses = []
+        mass_spectrum_pairs: List[Tuple[float, Dict[str, np.ndarray]]] = []
+
         for sp in spectra:
             mz = sp["precursor_mz"]
             if mz is None or mz <= 0:
                 continue
             charge = sp["precursor_charge"]
-            # Skip unknown charge (0) and singly-charged (non-peptide in ESI)
             if charge < MIN_CHARGE_QUALITY:
                 continue
-            # Skip spectra with too few fragment peaks
             if len(sp["mz"]) < MIN_PEAKS_QUALITY:
                 continue
             neutral_mass = (mz - PROTON_MASS) * charge
-            # Skip masses outside peptide range
             if neutral_mass < MIN_NEUTRAL_MASS or neutral_mass > MAX_NEUTRAL_MASS:
                 continue
             masses.append(neutral_mass)
+            mass_spectrum_pairs.append((
+                neutral_mass,
+                {"mz": sp["mz"], "intensity": sp["intensity"]},
+            ))
 
         all_masses = np.array(masses) if masses else np.array([], dtype=float)
 
-        # Deduplicate: bin to DEDUP_BIN_WIDTH resolution, keep unique
+        # Deduplicate: bin to DEDUP_BIN_WIDTH resolution, keep unique.
+        # For each bin, keep the spectrum with the most fragment peaks
+        # as the representative (best quality for alignment).
+        mass_to_spectrum: Dict[float, Dict[str, np.ndarray]] = {}
         if len(all_masses) > 0:
             binned = np.round(all_masses / DEDUP_BIN_WIDTH) * DEDUP_BIN_WIDTH
             unique_masses = np.unique(binned)
+            for i, (_, sp_data) in enumerate(mass_spectrum_pairs):
+                bm = binned[i]
+                existing = mass_to_spectrum.get(bm)
+                if existing is None or len(sp_data["mz"]) > len(existing["mz"]):
+                    mass_to_spectrum[bm] = sp_data
         else:
             unique_masses = np.array([], dtype=float)
 
-        return all_masses, unique_masses
+        return all_masses, unique_masses, mass_to_spectrum
 
     @staticmethod
     def _count_mass_pairs(
@@ -722,6 +764,92 @@ class PTMDetector:
             elif idx > 0 and abs(sorted_masses[idx - 1] - target) <= tolerance:
                 count += 1
         return count
+
+    # -----------------------------------------------------------------
+    # Tier 3: Spectral alignment validation
+    # -----------------------------------------------------------------
+
+    @staticmethod
+    def _top_n_peaks(
+        mz: np.ndarray, intensity: np.ndarray, n: int = TOP_N_PEAKS_ALIGN
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Select top N most intense peaks, returned sorted by m/z."""
+        if len(mz) <= n:
+            return mz, intensity
+        idx = np.argpartition(intensity, -n)[-n:]
+        idx_sorted = idx[np.argsort(mz[idx])]
+        return mz[idx_sorted], intensity[idx_sorted]
+
+    @staticmethod
+    def _align_spectra(
+        mz1: np.ndarray,
+        int1: np.ndarray,
+        mz2: np.ndarray,
+        int2: np.ndarray,
+        tolerance_ppm: float = ALIGNMENT_TOL_PPM,
+    ) -> int:
+        """Align two spectra using pyopenms SpectrumAligner.
+
+        Returns the number of matched peak pairs.
+        """
+        import pyopenms as oms
+
+        spec1 = oms.MSSpectrum()
+        spec1.set_peaks([mz1, int1])
+        spec2 = oms.MSSpectrum()
+        spec2.set_peaks([mz2, int2])
+
+        spa = oms.SpectrumAlignment()
+        p = spa.getParameters()
+        p.setValue("tolerance", tolerance_ppm)
+        p.setValue("is_relative_tolerance", "true")
+        spa.setParameters(p)
+
+        alignment = []
+        spa.getSpectrumAlignment(alignment, spec1, spec2)
+        return len(alignment)
+
+    def _validate_mass_shift_pairs(
+        self,
+        sorted_masses: np.ndarray,
+        shift: MassShift,
+        mass_to_spectrum: Dict[float, Dict[str, np.ndarray]],
+    ) -> int:
+        """Count mass pairs validated by spectral alignment.
+
+        For each pair (M, M+Δ), retrieves the representative spectra,
+        selects the top N most intense peaks from each, and aligns them.
+        Pairs with ≥ MIN_ALIGNED_PEAKS matched peaks are counted as validated.
+        """
+        validated = 0
+        delta = abs(shift.delta)
+        tol = shift.tolerance
+
+        for mass in sorted_masses:
+            target = mass + delta
+            idx = np.searchsorted(sorted_masses, target - tol)
+            partner = None
+            if idx < len(sorted_masses) and abs(sorted_masses[idx] - target) <= tol:
+                partner = sorted_masses[idx]
+            elif idx > 0 and abs(sorted_masses[idx - 1] - target) <= tol:
+                partner = sorted_masses[idx - 1]
+
+            if partner is None:
+                continue
+
+            sp1 = mass_to_spectrum.get(mass)
+            sp2 = mass_to_spectrum.get(partner)
+            if sp1 is None or sp2 is None:
+                continue
+
+            mz1, int1 = self._top_n_peaks(sp1["mz"], sp1["intensity"])
+            mz2, int2 = self._top_n_peaks(sp2["mz"], sp2["intensity"])
+            n_aligned = self._align_spectra(mz1, int1, mz2, int2)
+
+            if n_aligned >= MIN_ALIGNED_PEAKS:
+                validated += 1
+
+        return validated
 
     # -----------------------------------------------------------------
     # Utilities

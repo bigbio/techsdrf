@@ -113,13 +113,14 @@ class MassiveDownloader(BaseDownloader):
             f"Building file index for {self.accession} "
             f"(this may take a moment for large datasets)..."
         )
-        _walk_mlsd(base_path)
-        logger.info(f"Indexed {len(index)} files for {self.accession}")
-
         try:
-            ftp.quit()
-        except Exception:
-            pass
+            _walk_mlsd(base_path)
+            logger.info(f"Indexed {len(index)} files for {self.accession}")
+        finally:
+            try:
+                ftp.quit()
+            except Exception:
+                pass
 
         return index
 
@@ -159,29 +160,28 @@ class MassiveDownloader(BaseDownloader):
 
         logger.info(f"Downloading {filename} from {self.accession} via FTP...")
 
+        part_path = output_path.with_suffix(output_path.suffix + ".part")
         for attempt in range(MAX_RETRIES):
+            ftp = None
             try:
                 ftp = self._connect()
-                with open(output_path, "wb") as f:
+                with open(part_path, "wb") as f:
                     ftp.retrbinary(
                         f"RETR {ftp_path}", f.write, blocksize=1024 * 1024
                     )
-                try:
-                    ftp.quit()
-                except Exception:
-                    pass
 
-                if output_path.exists() and output_path.stat().st_size > 0:
+                if part_path.exists() and part_path.stat().st_size > 0:
+                    part_path.rename(output_path)
                     logger.info(f"Downloaded: {filename}")
                     return output_path
                 else:
                     logger.warning(f"Downloaded file is empty: {filename}")
-                    if output_path.exists():
-                        output_path.unlink()
+                    if part_path.exists():
+                        part_path.unlink()
 
             except ftplib.all_errors as e:
-                if output_path.exists():
-                    output_path.unlink()
+                if part_path.exists():
+                    part_path.unlink()
                 if attempt < MAX_RETRIES - 1:
                     wait = RETRY_BACKOFF * (2 ** attempt)
                     logger.warning(
@@ -194,5 +194,11 @@ class MassiveDownloader(BaseDownloader):
                         f"Failed to download {filename} "
                         f"after {MAX_RETRIES} attempts: {e}"
                     )
+            finally:
+                if ftp:
+                    try:
+                        ftp.quit()
+                    except Exception:
+                        pass
 
         return None

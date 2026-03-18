@@ -258,19 +258,15 @@ class TestCruxEstimator:
         assert estimator.charges == "2,3"
         assert estimator.min_peak_pairs == 30
 
-    @patch('subprocess.run')
-    def test_is_available_true(self, mock_run):
+    @patch('shutil.which', return_value='/usr/bin/crux')
+    def test_is_available_true(self, mock_which):
         """Test is_available when crux is installed."""
-        mock_run.return_value = Mock(returncode=0)
-
         estimator = CruxEstimator()
         assert estimator.is_available() is True
 
-    @patch('subprocess.run')
-    def test_is_available_false(self, mock_run):
+    @patch('shutil.which', return_value=None)
+    def test_is_available_false(self, mock_which):
         """Test is_available when crux is not installed."""
-        mock_run.side_effect = FileNotFoundError()
-
         estimator = CruxEstimator()
         assert estimator.is_available() is False
 

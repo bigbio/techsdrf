@@ -346,7 +346,7 @@ class SDRFRefiner:
         Validate the refined SDRF using sdrf-pipelines.
 
         Uses the appropriate template based on acquisition type:
-        - DDA: ms-proteomics + dda-acquisition
+        - DDA: ms-proteomics (no separate DDA template needed)
         - DIA: ms-proteomics + dia-acquisition
 
         Args:
@@ -362,9 +362,9 @@ class SDRFRefiner:
         if acquisition_type == "DIA":
             template = "dia-acquisition"
         else:
-            template = "dda-acquisition"
+            template = "ms-proteomics"
 
-        logger.info(f"Validating with template: ms-proteomics + {template}")
+        logger.info(f"Validating with template: {template}")
 
         try:
             from sdrf_pipelines.sdrf.sdrf import read_sdrf

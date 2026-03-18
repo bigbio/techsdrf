@@ -46,7 +46,10 @@ class RawFileConverter:
 
     def detect_vendor(self, raw_file: Path) -> VendorType:
         """
-        Detect vendor type from file extension.
+        Detect vendor type from file extension and file structure.
+
+        Waters .raw files are directories (containing _extern.inf), while
+        Thermo .raw files are single binary files. Both use the .raw extension.
 
         Args:
             raw_file: Path to raw file
@@ -55,6 +58,11 @@ class RawFileConverter:
             VendorType enum value
         """
         ext = raw_file.suffix.lower()
+        if ext == ".raw":
+            # Waters .raw is a directory; Thermo .raw is a file
+            if raw_file.is_dir():
+                return VendorType.WATERS
+            return VendorType.THERMO
         return self.EXTENSION_VENDOR_MAP.get(ext, VendorType.UNKNOWN)
 
     def convert(self, raw_file: Path) -> Optional[Path]:
